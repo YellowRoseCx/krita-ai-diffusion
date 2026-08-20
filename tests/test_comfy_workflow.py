@@ -112,3 +112,37 @@ def test_defaults_legacy_combo(info: ComfyObjectInfo):
     assert inputs["images"] == "img"
     assert inputs["format"] == "PNG"
     assert set(inputs.keys()) == {"images", "format"}
+
+
+def test_krea2_nodes(info: ComfyObjectInfo):
+    w = ComfyWorkflow(node_defs=info)
+    out_encode = w.krea2_edit_grounded_encode("clip_model", "prompt_text", "image_a", "image_b", grounding_px=768)
+    out_patch = w.krea2_edit_model_patch(
+        "diffusion_model",
+        "latent_a",
+        source_latent_b="latent_b",
+        vae="vae",
+        source_image="image_a",
+        source_image_b="image_b",
+        ref_boost=4.0,
+        ref_boost_a=2.0,
+    )
+    assert str(out_encode.node) in w.root
+    assert str(out_patch.node) in w.root
+
+    encode_inputs = w.root[str(out_encode.node)]["inputs"]
+    patch_inputs = w.root[str(out_patch.node)]["inputs"]
+
+    assert encode_inputs["clip"] == "clip_model"
+    assert encode_inputs["prompt"] == "prompt_text"
+    assert encode_inputs["image"] == "image_a"
+    assert encode_inputs["image_b"] == "image_b"
+    assert encode_inputs["grounding_px"] == 768
+
+    assert patch_inputs["model"] == "diffusion_model"
+    assert patch_inputs["source_latent"] == "latent_a"
+    assert patch_inputs["source_latent_b"] == "latent_b"
+    assert patch_inputs["source_image"] == "image_a"
+    assert patch_inputs["source_image_b"] == "image_b"
+    assert patch_inputs["ref_boost"] == 4.0
+    assert patch_inputs["ref_boost_a"] == 2.0

@@ -60,8 +60,10 @@ from .region import RegionPromptWidget
 from .widget import (
     ErrorBox,
     GenerateButton,
+    GroundingPxWidget,
     LayerCountWidget,
     QueueButton,
+    RefBoostWidget,
     StrengthWidget,
     StyleSelectWidget,
     WorkspaceSelectWidget,
@@ -757,6 +759,12 @@ class GenerationWidget(QWidget):
         layout.addWidget(self.region_prompt)
 
         self.strength_slider = StrengthWidget(parent=self)
+        self.ref_boost_slider = RefBoostWidget(prefix=_("Ref Boost (Subject)") + ": ", default_value=3.5, parent=self)
+        self.ref_boost_slider.setVisible(False)
+        self.ref_boost_a_slider = RefBoostWidget(prefix=_("Ref Boost (Scene)") + ": ", default_value=1.0, parent=self)
+        self.ref_boost_a_slider.setVisible(False)
+        self.grounding_px_slider = GroundingPxWidget(parent=self)
+        self.grounding_px_slider.setVisible(False)
         self.layer_count_widget = LayerCountWidget(self)
         self.layer_count_widget.setVisible(False)
         self.add_region_button = create_wide_tool_button("region-add", _("Add Region"), self)
@@ -769,6 +777,15 @@ class GenerationWidget(QWidget):
         strength_layout.addWidget(self.add_control_button)
         strength_layout.addWidget(self.add_region_button)
         layout.addLayout(strength_layout)
+
+        krea2_layout1 = QHBoxLayout()
+        krea2_layout1.addWidget(self.ref_boost_slider)
+        krea2_layout1.addWidget(self.ref_boost_a_slider)
+        layout.addLayout(krea2_layout1)
+
+        krea2_layout2 = QHBoxLayout()
+        krea2_layout2.addWidget(self.grounding_px_slider)
+        layout.addLayout(krea2_layout2)
 
         self.custom_inpaint = CustomInpaintWidget(self)
         layout.addWidget(self.custom_inpaint)
@@ -834,6 +851,9 @@ class GenerationWidget(QWidget):
                 bind(model, "workspace", self.workspace_select, "value", Bind.one_way),
                 bind(model, "style", self.style_select, "value"),
                 bind(model, "strength", self.strength_slider, "value"),
+                bind(model, "ref_boost", self.ref_boost_slider, "value"),
+                bind(model, "ref_boost_a", self.ref_boost_a_slider, "value"),
+                bind(model, "grounding_px", self.grounding_px_slider, "value"),
                 bind(model, "layer_count", self.layer_count_widget, "value"),
                 bind(model, "error", self.error_box, "error", Bind.one_way),
                 bind_toggle(model, "region_only", self.region_mask_button),
@@ -857,6 +877,9 @@ class GenerationWidget(QWidget):
             self.queue_button.model = model
             self.progress_bar.model = model
             self.strength_slider.model = model
+            self.ref_boost_slider.model = model
+            self.ref_boost_a_slider.model = model
+            self.grounding_px_slider.model = model
             self.history.model_ = model
             self.update_generate_options()
 
@@ -995,6 +1018,9 @@ class GenerationWidget(QWidget):
 
         arch = self.model.arch
         self.strength_slider.setVisible(arch is not Arch.qwen_l)
+        self.ref_boost_slider.setVisible(arch is Arch.krea2)
+        self.ref_boost_a_slider.setVisible(arch is Arch.krea2)
+        self.grounding_px_slider.setVisible(arch is Arch.krea2)
         self.layer_count_widget.setVisible(arch is Arch.qwen_l)
 
         regions = self.model.active_regions

@@ -341,6 +341,7 @@ class TextPrompt:
         clip: Clip,
         style_prompt: str | None = None,
         images: list[Output] | None = None,
+        grounding_px: int = 768,
     ):
         text = self.text
         if text != "" and style_prompt is not None:
@@ -355,6 +356,12 @@ class TextPrompt:
                 self._output = w.text_encode_qwen_image_edit(clip.model, None, image, text)
             elif clip.arch is Arch.qwen_e_p and images:
                 self._output = w.text_encode_qwen_image_edit_plus(clip.model, None, images, text)
+            elif clip.arch is Arch.krea2 and images:
+                image_a = images[0]
+                image_b = images[1] if len(images) > 1 else None
+                self._output = w.krea2_edit_grounded_encode(
+                    clip.model, text, image_a, image_b, grounding_px=grounding_px
+                )
             else:
                 self._output = w.clip_text_encode(clip.model, text)
 
@@ -414,6 +421,9 @@ class Conditioning:
     regions: list[Region] = field(default_factory=list)
     style_prompt: str = ""
     edit_reference: bool = False
+    ref_boost: float = 3.5
+    ref_boost_a: float = 1.0
+    grounding_px: int = 768
 
     @staticmethod
     def from_input(i: ConditioningInput, sampling: SamplingInput | None):
@@ -425,6 +435,9 @@ class Conditioning:
             [Region.from_input(r, idx, i.language) for idx, r in enumerate(i.regions)],
             i.style,
             i.edit_reference,
+            i.ref_boost,
+            i.ref_boost_a,
+            i.grounding_px,
         )
 
     def copy(self):
@@ -435,6 +448,9 @@ class Conditioning:
             [r.copy() for r in self.regions],
             self.style_prompt,
             self.edit_reference,
+            self.ref_boost,
+            self.ref_boost_a,
+            self.grounding_px,
         )
 
     def downscale(self, original: Extent, target: Extent):
@@ -482,8 +498,14 @@ def encode_prompt(
     ref_images += [c.image.load(w) for c in cond.all_control if c.mode.is_ip_adapter]
 
     if len(cond.regions) <= 1 or all(len(r.loras) == 0 for r in cond.regions):
-        positive = cond.positive.encode(w, clip, cond.style_prompt, ref_images)
-        negative = cond.negative.encode(w, clip) if cond.negative else positive
+        positive = cond.positive.encode(
+            w, clip, cond.style_prompt, ref_images, grounding_px=cond.grounding_px
+        )
+        negative = (
+            cond.negative.encode(w, clip, images=ref_images, grounding_px=cond.grounding_px)
+            if cond.negative
+            else positive
+        )
         return ConditioningOutput(positive, negative)
 
     assert regions is not None
@@ -754,6 +776,62 @@ def apply_reference_conditioning(
     return prompt
 
 
+def apply_krea2_edit_patch(
+    w: ComfyWorkflow,
+    model: Output,
+    input_image: Output | None,
+    input_latent: Output | None,
+    cond: Conditioning,
+    vae: Output,
+    target_latent: Output | None,
+    tiled_vae: bool,
+):
+    if not cond.all_control and not (cond.edit_reference and (input_image or input_latent)):
+        return model
+
+    extra_input = [c for c in cond.all_control if c.mode.is_ip_adapter]
+    images: list[Output] = []
+    if cond.edit_reference and input_image:
+        images.append(input_image)
+    images.extend(c.image.load(w) for c in extra_input)
+
+    if not images:
+        if cond.edit_reference and input_latent:
+            return w.krea2_edit_model_patch(
+                model, input_latent, target_latent=target_latent, ref_boost=cond.ref_boost
+            )
+        return model
+
+    image_a = images[0]
+    image_b = images[1] if len(images) > 1 else None
+    latent_a = vae_encode(w, vae, image_a, tiled_vae)
+    latent_b = vae_encode(w, vae, image_b, tiled_vae) if image_b is not None else None
+
+    if len(images) > 1 and cond.edit_reference:
+        # Two-image mode:
+        # source_latent (image_a / canvas) = scene -> ref_boost = cond.ref_boost_a
+        # source_latent_b (image_b / extra_input[0]) = subject/person -> ref_boost_a = extra_input[0].strength * cond.ref_boost
+        ref_boost = cond.ref_boost_a
+        ref_boost_a = extra_input[0].strength * cond.ref_boost
+    else:
+        # Single-image mode: ref_boost applies to source_latent (image_a), ref_boost_a defaults to cond.ref_boost_a
+        ref_boost = cond.ref_boost
+        ref_boost_a = cond.ref_boost_a
+
+    return w.krea2_edit_model_patch(
+        model,
+        latent_a,
+        source_latent_b=latent_b,
+        vae=vae,
+        source_image=image_a,
+        source_image_b=image_b,
+        target_latent=target_latent,
+        fit_mode="fit",
+        ref_boost=ref_boost,
+        ref_boost_a=ref_boost_a,
+    )
+
+
 def scale(
     extent: Extent,
     target: Extent,
@@ -832,8 +910,12 @@ def scale_refine_and_decode(
     latent = vae_encode(w, vae, upscale, tiled_vae)
     params = _sampler_params(sampling, extent.desired, strength=0.4)
 
-    prompt = encode_prompt(w, cond, clip, regions)
+    prompt = encode_prompt(w, cond, clip, regions, upscale)
     model, prompt = apply_control(w, model, prompt, cond.all_control, extent.desired, vae, models)
+    if arch is Arch.krea2:
+        empty_latent = w.empty_latent_image(extent.desired, arch, 1)
+        model = apply_krea2_edit_patch(w, model, upscale, latent, cond, vae, empty_latent, tiled_vae)
+        latent = empty_latent
     prompt = apply_reference_conditioning(w, prompt, upscale, latent, cond, vae, arch, tiled_vae)
     result = w.sampler_custom_advanced(model, prompt, latent, arch, **params)
     return vae_decode(w, vae, result, tiled_vae)
@@ -870,6 +952,10 @@ def generate(
     latent = w.empty_latent_image(extent.initial, models.arch, misc.batch_count)
     prompt = encode_prompt(w, cond, clip, regions)
     model, prompt = apply_control(w, model, prompt, cond.all_control, extent.initial, vae, models)
+    if models.arch is Arch.krea2:
+        model = apply_krea2_edit_patch(
+            w, model, None, None, cond, vae, latent, checkpoint.tiled_vae
+        )
     prompt = apply_reference_conditioning(
         w, prompt, None, None, cond, vae, models.arch, checkpoint.tiled_vae
     )
@@ -1068,6 +1154,10 @@ def inpaint(
         latent = w.set_latent_noise_mask(latent, inpaint_mask)
         inpaint_model = model
 
+    if models.arch is Arch.krea2:
+        inpaint_model = apply_krea2_edit_patch(
+            w, inpaint_model, in_image, latent, cond_base, vae, latent, checkpoint.tiled_vae
+        )
     prompt = apply_reference_conditioning(
         w, prompt, in_image, latent, cond_base, vae, models.arch, checkpoint.tiled_vae
     )
@@ -1159,6 +1249,15 @@ def refine(
     latent_batch = setup_latent_layers(w, latent_batch, extent.desired, misc.layer_count)
     prompt = encode_prompt(w, cond, clip, regions, in_image)
     model, prompt = apply_control(w, model, prompt, cond.all_control, extent.desired, vae, models)
+
+    if models.arch is Arch.krea2:
+        empty_latent = w.empty_latent_image(extent.desired, models.arch, misc.batch_count)
+        empty_latent = setup_latent_layers(w, empty_latent, extent.desired, misc.layer_count)
+        model = apply_krea2_edit_patch(
+            w, model, in_image, latent, cond, vae, empty_latent, checkpoint.tiled_vae
+        )
+        latent_batch = empty_latent
+
     prompt = apply_reference_conditioning(
         w, prompt, in_image, latent, cond, vae, models.arch, checkpoint.tiled_vae
     )
@@ -1573,6 +1672,7 @@ def prepare_prompts(
         Arch.flux2_4b: "image {}",
         Arch.flux2_9b: "image {}",
         Arch.qwen_e_p: "Picture {}",
+        Arch.krea2: "image {}",
     }.get(arch, "")
 
     cond.style = style.style_prompt
@@ -1583,7 +1683,7 @@ def prepare_prompts(
     cond.positive, extra_loras = extract_loras(cond.positive, files.loras)
     cond.positive = replace_layers(cond.positive, ref_layers, layer_replace)
     cond.positive += _collect_lora_triggers(models.loras, files)
-    if arch.is_flux2:
+    if arch.is_flux2 or arch is Arch.krea2:
         cond.positive = build_instructions(cond, arch, inpaint)
     if cond.positive == "" and inpaint is InpaintMode.remove_object:
         cond.positive = "background scenery"
