@@ -1228,6 +1228,15 @@ def refine(
     latent_batch = setup_latent_layers(w, latent_batch, extent.desired, misc.layer_count)
     prompt = encode_prompt(w, cond, clip, regions, in_image)
     model, prompt = apply_control(w, model, prompt, cond.all_control, extent.desired, vae, models)
+
+    if models.arch is Arch.krea2:
+        empty_latent = w.empty_latent_image(extent.desired, models.arch, misc.batch_count)
+        empty_latent = setup_latent_layers(w, empty_latent, extent.desired, misc.layer_count)
+        model = apply_krea2_edit_patch(
+            w, model, in_image, latent, cond, vae, empty_latent, checkpoint.tiled_vae
+        )
+        latent_batch = empty_latent
+
     prompt = apply_reference_conditioning(
         w, prompt, in_image, latent, cond, vae, models.arch, checkpoint.tiled_vae
     )
