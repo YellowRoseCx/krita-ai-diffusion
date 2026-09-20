@@ -242,7 +242,8 @@
         }
       ],
       "alternatives": [
-        "models/text_encoders/qwen3vl_4b_bf16.safetensors"
+        "models/text_encoders/qwen3vl_4b_bf16.safetensors",
+        "models/text_encoders/qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors"
       ]
     },
     {
@@ -256,7 +257,8 @@
         }
       ],
       "alternatives": [
-        "models/vae/qwen_image.safetensors"
+        "models/vae/qwen_image.safetensors",
+        "models/vae/wan_2.1_vae.safetensors"
       ]
     }
   ],
@@ -404,7 +406,8 @@
       ],
       "alternatives": [
         "models/diffusion_models/krea2_turbo_bf16.safetensors",
-        "models/diffusion_models/krea2_turbo_nvfp4.safetensors"
+        "models/diffusion_models/krea2_turbo_nvfp4.safetensors",
+        "models/diffusion_models/lustifyNSFWCheckpoint_v10Krea2-TURBO.safetensors"
       ]
     }
   ],
