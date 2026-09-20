@@ -341,6 +341,7 @@ class TextPrompt:
         clip: Clip,
         style_prompt: str | None = None,
         images: list[Output] | None = None,
+        grounding_px: int = 768,
     ):
         text = self.text
         if text != "" and style_prompt is not None:
@@ -358,7 +359,9 @@ class TextPrompt:
             elif clip.arch is Arch.krea2 and images:
                 image_a = images[0]
                 image_b = images[1] if len(images) > 1 else None
-                self._output = w.krea2_edit_grounded_encode(clip.model, text, image_a, image_b)
+                self._output = w.krea2_edit_grounded_encode(
+                    clip.model, text, image_a, image_b, grounding_px=grounding_px
+                )
             else:
                 self._output = w.clip_text_encode(clip.model, text)
 
@@ -419,6 +422,7 @@ class Conditioning:
     style_prompt: str = ""
     edit_reference: bool = False
     ref_boost: float = 3.5
+    grounding_px: int = 768
 
     @staticmethod
     def from_input(i: ConditioningInput, sampling: SamplingInput | None):
@@ -431,6 +435,7 @@ class Conditioning:
             i.style,
             i.edit_reference,
             i.ref_boost,
+            i.grounding_px,
         )
 
     def copy(self):
@@ -442,6 +447,7 @@ class Conditioning:
             self.style_prompt,
             self.edit_reference,
             self.ref_boost,
+            self.grounding_px,
         )
 
     def downscale(self, original: Extent, target: Extent):
@@ -489,8 +495,14 @@ def encode_prompt(
     ref_images += [c.image.load(w) for c in cond.all_control if c.mode.is_ip_adapter]
 
     if len(cond.regions) <= 1 or all(len(r.loras) == 0 for r in cond.regions):
-        positive = cond.positive.encode(w, clip, cond.style_prompt, ref_images)
-        negative = cond.negative.encode(w, clip, images=ref_images) if cond.negative else positive
+        positive = cond.positive.encode(
+            w, clip, cond.style_prompt, ref_images, grounding_px=cond.grounding_px
+        )
+        negative = (
+            cond.negative.encode(w, clip, images=ref_images, grounding_px=cond.grounding_px)
+            if cond.negative
+            else positive
+        )
         return ConditioningOutput(positive, negative)
 
     assert regions is not None

@@ -113,6 +113,7 @@ class ConditioningInput:
     language: str = ""
     edit_reference: bool = False  # use input image as conditioning reference
     ref_boost: float = 3.5  # reference boost factor for Krea 2 Edit mode
+    grounding_px: int = 768  # grounding resolution in pixels for Krea 2 Edit mode
 
 
 class InpaintMode(Enum):
