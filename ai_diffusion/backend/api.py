@@ -112,6 +112,7 @@ class ConditioningInput:
     regions: list[RegionInput] = field(default_factory=list)
     language: str = ""
     edit_reference: bool = False  # use input image as conditioning reference
+    ref_boost: float = 3.5  # reference boost factor for Krea 2 Edit mode
 
 
 class InpaintMode(Enum):

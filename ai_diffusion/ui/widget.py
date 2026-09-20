@@ -1176,6 +1176,74 @@ def create_framed_label(text: str, parent=None):
     return frame, label
 
 
+class RefBoostWidget(QWidget):
+    _model: DocumentModel | None = None
+    _value: float = 3.5
+
+    value_changed = pyqtSignal(float)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._layout = QHBoxLayout()
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(self._layout)
+
+        self._slider = QSlider(Qt.Orientation.Horizontal, self)
+        self._slider.setMinimum(10)  # 1.0
+        self._slider.setMaximum(100) # 10.0
+        self._slider.setValue(int(self._value * 10))
+        self._slider.setSingleStep(1)
+        self._slider.valueChanged.connect(self._slider_changed)
+
+        self._input = QDoubleSpinBox(self)
+        self._input.setMinimum(1.0)
+        self._input.setMaximum(10.0)
+        self._input.setSingleStep(0.1)
+        self._input.setValue(self._value)
+        self._input.setPrefix(_("Ref Boost") + ": ")
+        self._input.valueChanged.connect(self._input_changed)
+
+        self._layout.addWidget(self._slider)
+        self._layout.addWidget(self._input)
+
+    def _slider_changed(self, int_val: int):
+        val = int_val / 10.0
+        self._notify_changed(val)
+
+    def _input_changed(self, val: float):
+        self._notify_changed(val)
+
+    def _notify_changed(self, val: float):
+        if self._update_value(val):
+            self.value_changed.emit(self.value)
+
+    def _update_value(self, val: float):
+        val = max(1.0, min(10.0, round(val, 1)))
+        with SignalBlocker(self._slider), SignalBlocker(self._input):
+            self._slider.setValue(int(val * 10))
+            self._input.setValue(val)
+        if val != self._value:
+            self._value = val
+            return True
+        return False
+
+    @property
+    def model(self):
+        return self._model
+
+    @model.setter
+    def model(self, model: DocumentModel | None):
+        self._model = model
+
+    @property
+    def value(self) -> float:
+        return self._value
+
+    @value.setter
+    def value(self, value: float):
+        self._update_value(value)
+
+
 def _paint_tool_drop_down(widget: QToolButton, text: str | None = None):
     opt = QStyleOption()
     opt.initFrom(widget)
