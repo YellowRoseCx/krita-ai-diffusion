@@ -137,6 +137,7 @@ class DocumentModel(QObject, ObservableProperties):
     region_only = Property(False, persist=True)
     edit_mode = Property(False, persist=True)
     ref_boost = Property(3.5, persist=True)
+    ref_boost_a = Property(1.0, persist=True)
     grounding_px = Property(768, persist=True)
     batch_count = Property(1, persist=True)
     seed = Property(0, persist=True)
@@ -155,6 +156,7 @@ class DocumentModel(QObject, ObservableProperties):
     region_only_changed = pyqtSignal(bool)
     edit_mode_changed = pyqtSignal(bool)
     ref_boost_changed = pyqtSignal(float)
+    ref_boost_a_changed = pyqtSignal(float)
     grounding_px_changed = pyqtSignal(int)
     batch_count_changed = pyqtSignal(int)
     seed_changed = pyqtSignal(int)
@@ -956,6 +958,7 @@ class DocumentModel(QObject, ObservableProperties):
 
         cond.edit_reference = self.is_editing
         cond.ref_boost = self.ref_boost
+        cond.ref_boost_a = self.ref_boost_a
         cond.grounding_px = self.grounding_px
         layers = extract_layers(cond)
         add_refs(cond.control, layers)

@@ -1182,8 +1182,9 @@ class RefBoostWidget(QWidget):
 
     value_changed = pyqtSignal(float)
 
-    def __init__(self, parent=None):
+    def __init__(self, prefix: str = "Ref Boost: ", default_value: float = 3.5, parent=None):
         super().__init__(parent)
+        self._value = default_value
         self._layout = QHBoxLayout()
         self._layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(self._layout)
@@ -1200,7 +1201,7 @@ class RefBoostWidget(QWidget):
         self._input.setMaximum(10.0)
         self._input.setSingleStep(0.1)
         self._input.setValue(self._value)
-        self._input.setPrefix(_("Ref Boost") + ": ")
+        self._input.setPrefix(prefix)
         self._input.valueChanged.connect(self._input_changed)
 
         self._layout.addWidget(self._slider)

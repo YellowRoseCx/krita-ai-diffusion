@@ -422,6 +422,7 @@ class Conditioning:
     style_prompt: str = ""
     edit_reference: bool = False
     ref_boost: float = 3.5
+    ref_boost_a: float = 1.0
     grounding_px: int = 768
 
     @staticmethod
@@ -435,6 +436,7 @@ class Conditioning:
             i.style,
             i.edit_reference,
             i.ref_boost,
+            i.ref_boost_a,
             i.grounding_px,
         )
 
@@ -447,6 +449,7 @@ class Conditioning:
             self.style_prompt,
             self.edit_reference,
             self.ref_boost,
+            self.ref_boost_a,
             self.grounding_px,
         )
 
@@ -804,12 +807,16 @@ def apply_krea2_edit_patch(
     latent_a = vae_encode(w, vae, image_a, tiled_vae)
     latent_b = vae_encode(w, vae, image_b, tiled_vae) if image_b is not None else None
 
-    if cond.edit_reference and input_image:
-        ref_boost = cond.ref_boost
-        ref_boost_a = (extra_input[0].strength * cond.ref_boost) if extra_input else 1.0
+    if len(images) > 1 and cond.edit_reference:
+        # Two-image mode:
+        # source_latent (image_a / canvas) = scene -> ref_boost = cond.ref_boost_a
+        # source_latent_b (image_b / extra_input[0]) = subject/person -> ref_boost_a = extra_input[0].strength * cond.ref_boost
+        ref_boost = cond.ref_boost_a
+        ref_boost_a = extra_input[0].strength * cond.ref_boost
     else:
-        ref_boost = (extra_input[0].strength * cond.ref_boost) if extra_input else cond.ref_boost
-        ref_boost_a = (extra_input[1].strength * cond.ref_boost) if len(extra_input) > 1 else 1.0
+        # Single-image mode: ref_boost applies to source_latent (image_a), ref_boost_a defaults to cond.ref_boost_a
+        ref_boost = cond.ref_boost
+        ref_boost_a = cond.ref_boost_a
 
     return w.krea2_edit_model_patch(
         model,
@@ -906,7 +913,9 @@ def scale_refine_and_decode(
     prompt = encode_prompt(w, cond, clip, regions, upscale)
     model, prompt = apply_control(w, model, prompt, cond.all_control, extent.desired, vae, models)
     if arch is Arch.krea2:
-        model = apply_krea2_edit_patch(w, model, upscale, latent, cond, vae, latent, tiled_vae)
+        empty_latent = w.empty_latent_image(extent.desired, arch, 1)
+        model = apply_krea2_edit_patch(w, model, upscale, latent, cond, vae, empty_latent, tiled_vae)
+        latent = empty_latent
     prompt = apply_reference_conditioning(w, prompt, upscale, latent, cond, vae, arch, tiled_vae)
     result = w.sampler_custom_advanced(model, prompt, latent, arch, **params)
     return vae_decode(w, vae, result, tiled_vae)

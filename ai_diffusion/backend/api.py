@@ -112,7 +112,8 @@ class ConditioningInput:
     regions: list[RegionInput] = field(default_factory=list)
     language: str = ""
     edit_reference: bool = False  # use input image as conditioning reference
-    ref_boost: float = 3.5  # reference boost factor for Krea 2 Edit mode
+    ref_boost: float = 3.5  # reference boost factor for subject/main image in Krea 2 Edit mode
+    ref_boost_a: float = 1.0  # reference boost factor for scene image in Krea 2 Edit mode
     grounding_px: int = 768  # grounding resolution in pixels for Krea 2 Edit mode
 
 
