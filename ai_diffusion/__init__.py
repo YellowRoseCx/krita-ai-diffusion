@@ -2,6 +2,8 @@
 
 __version__ = "1.54.0"
 
+from . import qt_compat as _qt_compat  # noqa: F401
+
 import importlib.util
 
 if not importlib.util.find_spec(".websockets.src", "ai_diffusion"):
@@ -18,8 +20,10 @@ if importlib.util.find_spec("krita"):
 
     if not getattr(krita, "IS_MOCK", False):
         krita_ver = krita.Krita.instance().version()
-        if not krita_ver.startswith("6"):
-            raise ImportError(f"This Plugin is for Krita 6.x, but you are using Krita {krita_ver}.")
+        if not (krita_ver.startswith("5") or krita_ver.startswith("6")):
+            raise ImportError(
+                f"This Plugin is for Krita 5.x or 6.x, but you are using Krita {krita_ver}."
+            )
 
         from .extension import AIToolsExtension as AIToolsExtension
 

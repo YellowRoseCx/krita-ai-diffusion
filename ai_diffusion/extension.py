@@ -87,10 +87,15 @@ class AIToolsExtension(Extension):
 
 
 Krita.instance().addExtension(AIToolsExtension(Krita.instance()))
+dock_pos = getattr(
+    getattr(DockWidgetFactoryBase, "DockPosition", DockWidgetFactoryBase),
+    "DockRight",
+    DockWidgetFactoryBase.DockRight,
+)
 Krita.instance().addDockWidgetFactory(
     DockWidgetFactory(
         "imageDiffusion",
-        DockWidgetFactoryBase.DockPosition.DockRight,  # type: ignore
+        dock_pos,
         ImageDiffusionWidget,
     )
 )
